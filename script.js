@@ -646,16 +646,26 @@ function getSessionId() {
 }
 
 // API endpoint configuration
-// Application is deployed on Vercel - always use same origin or deployed backend
+// Backend API is deployed on Vercel, frontend may be on different hosting (IONOS)
 function getApiBaseUrl() {
+    // Always use the Vercel backend URL since API functions are deployed there
+    // Frontend can be hosted on IONOS or other static hosting
+    const DEPLOYED_BACKEND_URL = 'https://aura-website-livid.vercel.app';
+    
     // If running from file:// protocol (opened directly), use deployed backend
     if (window.location.protocol === 'file:') {
-        const DEPLOYED_BACKEND_URL = 'https://aura-website-livid.vercel.app';
         return DEPLOYED_BACKEND_URL;
     }
     
-    // For deployed frontend, use same origin (Vercel handles routing)
-    return window.location.origin;
+    // Check if we're on Vercel (same origin has the API)
+    // If not on Vercel (e.g., IONOS), use the Vercel backend URL
+    if (window.location.hostname.includes('vercel.app')) {
+        // On Vercel, use same origin
+        return window.location.origin;
+    }
+    
+    // For other hosting (IONOS, etc.), use Vercel backend
+    return DEPLOYED_BACKEND_URL;
 }
 
 const API_BASE_URL = getApiBaseUrl();
@@ -698,6 +708,15 @@ async function sendMessageToAPI(message) {
             }),
         });
 
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            // If we get HTML instead of JSON, it means the API endpoint doesn't exist
+            const text = await response.text();
+            console.error('API returned non-JSON response:', text.substring(0, 200));
+            throw new Error('Chat API endpoint not found. Please check the backend configuration.');
+        }
+
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Failed to get response from server');
@@ -707,6 +726,10 @@ async function sendMessageToAPI(message) {
         return data.response;
     } catch (error) {
         console.error('Chat API error:', error);
+        // Re-throw with more context if it's a parsing error
+        if (error.message.includes('JSON') || error.message.includes('Unexpected token')) {
+            throw new Error('Unable to connect to chat service. The API endpoint may not be configured correctly.');
+        }
         throw error;
     }
 }

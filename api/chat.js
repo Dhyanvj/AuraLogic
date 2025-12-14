@@ -140,9 +140,30 @@ export default async function handler(req, res) {
             const assistantMessage = messages.data[0];
             let responseText = assistantMessage.content[0].text.value;
 
-            // Remove citation markers (e.g., 【10:1†source】)
+            // Remove citation markers in various formats
             // These appear when the assistant uses file-based retrieval
-            responseText = responseText.replace(/【\d+:\d+†source】/g, '').trim();
+            // Handle multiple citation formats:
+            // - 【10:1†source】 (full-width brackets with source)
+            // - [10:1†source] (regular brackets with source)
+            // - 【10:1】 (full-width brackets without source)
+            // - [10:1] (regular brackets without source)
+            // - 【10:1†】 (full-width brackets with dagger but no source)
+            // - [10:1†] (regular brackets with dagger but no source)
+            // And any variations with different numbers
+            
+            // Remove citations with full-width brackets (【】) - most common in OpenAI responses
+            // Matches: 【number:number†source】, 【number:number】, 【number†source】, etc.
+            responseText = responseText.replace(/【\d+[:\d]*[†]?[^】]*】/g, '');
+            
+            // Remove citations with regular brackets that match citation patterns
+            // Pattern: [number:number†source] or [number:number] or [number†source]
+            responseText = responseText.replace(/\[\d+:\d+[†]?[^\]]*source[^\]]*\]/gi, '');
+            responseText = responseText.replace(/\[\d+:\d+[†]?[^\]]*\]/g, '');
+            responseText = responseText.replace(/\[\d+[†][^\]]*source[^\]]*\]/gi, '');
+            responseText = responseText.replace(/\[\d+[†][^\]]*\]/g, '');
+            
+            // Clean up any double spaces or extra whitespace that may result from citation removal
+            responseText = responseText.replace(/\s{2,}/g, ' ').trim();
 
             return res.status(200).json({ 
                 response: responseText,
